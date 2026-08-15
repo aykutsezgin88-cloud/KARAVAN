@@ -82,15 +82,12 @@
 
       try {
         const rawStr = new TextDecoder().decode(value).trim();
-        
-        // ESP32'nin gönderdiği "V: ...V | A: ...A | W: ...W" formatını doğrudan okuyan akıllı regex ayrıştırıcı
         const vMatch = rawStr.match(/V:\s*([0-9.]+)/i);
         const iMatch = rawStr.match(/A:\s*([0-9.-]+)/i);
 
         if (vMatch) v = parseFloat(vMatch[1]);
         if (iMatch) i = parseFloat(iMatch[1]);
 
-        // Eğer eşleşme olmazsa eski yöntemleri dene
         if (isNaN(v) || isNaN(i)) {
           const parts = rawStr.split(/[,;\s|]+/);
           for (let p of parts) {
@@ -110,8 +107,9 @@
       if (isNaN(i)) i = 0;
 
       const w = (v * i).toFixed(1);
-      // LiFePO4 için yaklaşık % hesaplama (25V boş, 29.2V dolu)
-      let soc = Math.round(((v - 25.0) / (29.2 - 25.0)) * 100);
+      
+      // %0 = 20.00V, %100 = 25.60V ve üzeri
+      let soc = Math.round(((v - 20.00) / (25.60 - 20.00)) * 100);
       soc = Math.min(Math.max(soc, 0), 100);
 
       document.getElementById("status").innerText = "Canlı Veri Alınıyor";
