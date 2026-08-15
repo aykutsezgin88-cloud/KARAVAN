@@ -81,43 +81,40 @@
       let v = 0, i = 0;
 
       try {
-        // Önce metin olarak okumayı deneyelim
         const rawStr = new TextDecoder().decode(value).trim();
-        if (rawStr.startsWith('{')) {
-          const data = JSON.parse(rawStr);
-          v = parseFloat(data.v) || 0;
-          i = parseFloat(data.i) || 0;
-        } else {
-          const parts = rawStr.split(/[,;\s]+/);
-          v = parseFloat(parts[0]);
-          i = parseFloat(parts[1]);
-        }
+        
+        // ESP32'nin gönderdiği "V: ...V | A: ...A | W: ...W" formatını doğrudan okuyan akıllı regex ayrıştırıcı
+        const vMatch = rawStr.match(/V:\s*([0-9.]+)/i);
+        const iMatch = rawStr.match(/A:\s*([0-9.-]+)/i);
 
-        // Eğer metin çözümlemesi başarısız olursa (NaN çıkarsa) binary (Float32) olarak okumayı dene
+        if (vMatch) v = parseFloat(vMatch[1]);
+        if (iMatch) i = parseFloat(iMatch[1]);
+
+        // Eğer eşleşme olmazsa eski yöntemleri dene
         if (isNaN(v) || isNaN(i)) {
-          if (value.byteLength >= 8) {
-            v = value.getFloat32(0, true);
-            i = value.getFloat32(4, true);
+          const parts = rawStr.split(/[,;\s|]+/);
+          for (let p of parts) {
+            let num = parseFloat(p);
+            if (!isNaN(num)) {
+              if (v === 0) v = num;
+              else if (i === 0) i = num;
+            }
           }
         }
       } catch (e) {
-        // Hata durumunda binary okuma fallback
-        try {
-          if (value.byteLength >= 8) {
-            v = value.getFloat32(0, true);
-            i = value.getFloat32(4, true);
-          }
-        } catch (err) {}
+        v = 0;
+        i = 0;
       }
 
       if (isNaN(v)) v = 0;
       if (isNaN(i)) i = 0;
 
       const w = (v * i).toFixed(1);
+      // LiFePO4 için yaklaşık % hesaplama (25V boş, 29.2V dolu)
       let soc = Math.round(((v - 25.0) / (29.2 - 25.0)) * 100);
       soc = Math.min(Math.max(soc, 0), 100);
 
-      document.getElementById("status").innerText = "Veri Alınıyor (V: " + v.toFixed(2) + ", I: " + i.toFixed(2) + ")";
+      document.getElementById("status").innerText = "Canlı Veri Alınıyor";
       document.getElementById("valV").innerText = v.toFixed(2) + " V";
       document.getElementById("valA").innerText = (i > 0 ? "+" : "") + i.toFixed(2) + " A";
       document.getElementById("valW").innerText = w + " W";
