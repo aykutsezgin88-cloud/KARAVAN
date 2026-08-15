@@ -20,7 +20,7 @@
     .val-a { color: #ff9100; }
     .val-w { color: #29b6f6; }
     button { background: #00e676; color: #000; border: none; padding: 15px; font-size: 1rem; font-weight: bold; border-radius: 30px; margin-top: 20px; width: 100%; cursor: pointer; }
-    #status { margin-top: 10px; font-size: 0.8rem; color: #666; }
+    #status { margin-top: 10px; font-size: 0.75rem; color: #00e676; word-break: break-all; }
   </style>
 </head>
 <body>
@@ -69,7 +69,7 @@
 
         await char.startNotifications();
         char.addEventListener('characteristicvaluechanged', handleData);
-        status.innerText = "Bağlantı Başarılı";
+        status.innerText = "Bağlantı Başarılı, veri bekleniyor...";
         document.getElementById("btnConnect").style.display = "none";
       } catch (err) {
         status.innerText = "Hata: " + err.message;
@@ -77,29 +77,55 @@
     }
 
     function handleData(event) {
-      const str = new TextDecoder().decode(event.target.value);
+      const value = event.target.value;
+      let v = 0, i = 0;
+
       try {
-        let v = 0, i = 0;
-        if (str.startsWith('{')) {
-          const data = JSON.parse(str);
-          v = data.v || 0; i = data.i || 0;
+        // Önce metin olarak okumayı deneyelim
+        const rawStr = new TextDecoder().decode(value).trim();
+        if (rawStr.startsWith('{')) {
+          const data = JSON.parse(rawStr);
+          v = parseFloat(data.v) || 0;
+          i = parseFloat(data.i) || 0;
         } else {
-          const parts = str.split(',');
-          v = parseFloat(parts[0]); i = parseFloat(parts[1]);
+          const parts = rawStr.split(/[,;\s]+/);
+          v = parseFloat(parts[0]);
+          i = parseFloat(parts[1]);
         }
-        const w = (v * i).toFixed(1);
-        let soc = Math.round(((v - 25.0) / (29.2 - 25.0)) * 100);
-        soc = Math.min(Math.max(soc, 0), 100);
 
-        document.getElementById("valV").innerText = v.toFixed(2) + " V";
-        document.getElementById("valA").innerText = (i > 0 ? "+" : "") + i.toFixed(2) + " A";
-        document.getElementById("valW").innerText = w + " W";
-        document.getElementById("batSoc").innerText = soc + "%";
+        // Eğer metin çözümlemesi başarısız olursa (NaN çıkarsa) binary (Float32) olarak okumayı dene
+        if (isNaN(v) || isNaN(i)) {
+          if (value.byteLength >= 8) {
+            v = value.getFloat32(0, true);
+            i = value.getFloat32(4, true);
+          }
+        }
+      } catch (e) {
+        // Hata durumunda binary okuma fallback
+        try {
+          if (value.byteLength >= 8) {
+            v = value.getFloat32(0, true);
+            i = value.getFloat32(4, true);
+          }
+        } catch (err) {}
+      }
 
-        const fill = document.getElementById("batFill");
-        fill.style.height = soc + "%";
-        fill.style.background = soc > 50 ? "#00e676" : (soc > 20 ? "#ffb300" : "#ff3d00");
-      } catch(e) {}
+      if (isNaN(v)) v = 0;
+      if (isNaN(i)) i = 0;
+
+      const w = (v * i).toFixed(1);
+      let soc = Math.round(((v - 25.0) / (29.2 - 25.0)) * 100);
+      soc = Math.min(Math.max(soc, 0), 100);
+
+      document.getElementById("status").innerText = "Veri Alınıyor (V: " + v.toFixed(2) + ", I: " + i.toFixed(2) + ")";
+      document.getElementById("valV").innerText = v.toFixed(2) + " V";
+      document.getElementById("valA").innerText = (i > 0 ? "+" : "") + i.toFixed(2) + " A";
+      document.getElementById("valW").innerText = w + " W";
+      document.getElementById("batSoc").innerText = soc + "%";
+
+      const fill = document.getElementById("batFill");
+      fill.style.height = soc + "%";
+      fill.style.background = soc > 50 ? "#00e676" : (soc > 20 ? "#ffb300" : "#ff3d00");
     }
   </script>
 </body>
